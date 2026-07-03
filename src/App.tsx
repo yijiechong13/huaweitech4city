@@ -1,5 +1,8 @@
 import { Routes, Route } from 'react-router-dom'
 import HomePage from './pages/HomePage'
+import ProfilePage from './pages/ProfilePage'
+import FriendsPage from './pages/FriendsPage'
+import ChatPage from './pages/ChatPage'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -19,6 +22,9 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path="/" element={<HomePage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/friends" element={<FriendsPage />} />
+          <Route path="/chat/:conversationId" element={<ChatPage />} />
         </Route>
       </Route>
     </Routes>
