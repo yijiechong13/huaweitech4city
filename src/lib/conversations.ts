@@ -46,23 +46,25 @@ export async function openOrCreateDm(myId: string, friendId: string): Promise<st
     }
   }
 
-  // No existing DM — create one.
-  const { data: convo, error: convoErr } = await supabase
+  // No existing DM — create one. The id is generated client-side because
+  // INSERT ... RETURNING is subject to the SELECT policy (membership), and
+  // membership rows don't exist yet at this point — selecting the new row
+  // back would fail RLS with a 403.
+  const convoId = crypto.randomUUID()
+  const { error: convoErr } = await supabase
     .from('conversations')
-    .insert({ is_group: false })
-    .select('id')
-    .single()
+    .insert({ id: convoId, is_group: false })
   if (convoErr) throw convoErr
 
   const { error: meErr } = await supabase
     .from('conversation_members')
-    .insert({ conversation_id: convo.id, user_id: myId })
+    .insert({ conversation_id: convoId, user_id: myId })
   if (meErr) throw meErr
 
   const { error: friendErr } = await supabase
     .from('conversation_members')
-    .insert({ conversation_id: convo.id, user_id: friendId })
+    .insert({ conversation_id: convoId, user_id: friendId })
   if (friendErr) throw friendErr
 
-  return convo.id
+  return convoId
 }

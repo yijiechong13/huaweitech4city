@@ -17,11 +17,16 @@ export default function AppLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
+    // h-dvh + overflow-y-auto on <main>: pages scroll inside the shell, so
+    // full-height views (chat) can size panes with h-full instead of calc().
+    <div className="flex h-dvh flex-col bg-slate-50">
+      <header className="shrink-0 border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex min-w-0 items-center gap-4">
             <span className="truncate font-semibold text-slate-900">Harm-Detection Chat</span>
+            <Link to="/chat" className="text-sm font-medium text-slate-700 hover:text-slate-900">
+              Chats
+            </Link>
             <Link to="/friends" className="text-sm font-medium text-slate-700 hover:text-slate-900">
               Friends
             </Link>
@@ -47,7 +52,7 @@ export default function AppLayout() {
           </div>
         </div>
       </header>
-      <main>
+      <main className="min-h-0 flex-1 overflow-y-auto">
         <Outlet />
       </main>
     </div>
