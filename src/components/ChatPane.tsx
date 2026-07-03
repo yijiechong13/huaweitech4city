@@ -82,7 +82,13 @@ function MessageBubble({
 export default function ChatPane({ conversationId, friend }: ChatPaneProps) {
   const { user } = useAuth()
   const { messages, loading, error, send, retry } = useMessages(conversationId)
-  const { messageScores, conversationScores, evidenceIds } = useScores(conversationId)
+  const {
+    messageScores,
+    conversationScores,
+    evidenceIds,
+    loading: scoresLoading,
+    error: scoresError,
+  } = useScores(conversationId)
   const [draft, setDraft] = useState('')
   const [alertsOpen, setAlertsOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -179,6 +185,8 @@ export default function ChatPane({ conversationId, friend }: ChatPaneProps) {
                 conversationScores={conversationScores}
                 messageScores={messageScores}
                 messages={messages}
+                loading={scoresLoading}
+                error={scoresError}
               />
             </div>
           )}
@@ -208,6 +216,8 @@ export default function ChatPane({ conversationId, friend }: ChatPaneProps) {
           conversationScores={conversationScores}
           messageScores={messageScores}
           messages={messages}
+          loading={scoresLoading}
+          error={scoresError}
         />
       </aside>
     </div>

@@ -23,8 +23,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
 
   useEffect(() => {
-    // Restore any persisted session on first load.
-    supabase.auth.getSession().then(({ data }) => {
+    // Restore any persisted session on first load. On error the session is
+    // null and ProtectedRoute sends the user to /login — the right fallback.
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (error) console.warn('getSession failed:', error.message)
       setSession(data.session)
       setLoading(false)
     })
@@ -50,8 +52,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .select('*')
       .eq('id', userId)
       .single()
-      .then(({ data }) => {
-        // On error data is null — leave profile null and let the UI fall back.
+      .then(({ data, error }) => {
+        // On error leave profile null — the header falls back to the email.
+        if (error) console.warn('profile load failed:', error.message)
         if (!cancelled && data) setProfile(data)
       })
     return () => {

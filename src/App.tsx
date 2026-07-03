@@ -1,5 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
-import HomePage from './pages/HomePage'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import ProfilePage from './pages/ProfilePage'
 import FriendsPage from './pages/FriendsPage'
 import ChatPage from './pages/ChatPage'
@@ -21,7 +20,7 @@ export default function App() {
       {/* Authenticated app — redirect to /login if logged out. */}
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
-          <Route path="/" element={<HomePage />} />
+          <Route path="/" element={<Navigate to="/chat" replace />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/friends" element={<FriendsPage />} />
           <Route path="/chat" element={<ChatPage />} />

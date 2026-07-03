@@ -6,6 +6,8 @@ export interface ConversationScores {
   messageScores: Map<string, MessageScore[]> // keyed by msg_id
   conversationScores: ConversationScore[]
   evidenceIds: Set<string> // union of evidence_msg_ids across conversation scores
+  loading: boolean
+  error: string | null
 }
 
 // Live harm-score state for one conversation. Same subscribe-before-fetch
@@ -14,12 +16,16 @@ export interface ConversationScores {
 export function useScores(conversationId: string | undefined): ConversationScores {
   const [messageScores, setMessageScores] = useState<Map<string, MessageScore[]>>(new Map())
   const [conversationScores, setConversationScores] = useState<ConversationScore[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!conversationId) return
     let cancelled = false
     setMessageScores(new Map())
     setConversationScores([])
+    setLoading(true)
+    setError(null)
 
     const addMessageScore = (score: MessageScore) => {
       setMessageScores((prev) => {
@@ -88,11 +94,17 @@ export function useScores(conversationId: string | undefined): ConversationScore
         supabase.from('conversation_scores').select('*').eq('conversation_id', conversationId),
       ])
       if (cancelled) return
-      for (const row of msgRes.data ?? []) {
-        const { messages: _joined, ...score } = row as MessageScore & { messages: unknown }
-        addMessageScore(score)
+      if (msgRes.error || convRes.error) {
+        console.warn('score fetch failed:', msgRes.error?.message, convRes.error?.message)
+        setError("Couldn't load safety alerts for this chat.")
+      } else {
+        for (const row of msgRes.data) {
+          const { messages: _joined, ...score } = row as MessageScore & { messages: unknown }
+          addMessageScore(score)
+        }
+        for (const row of convRes.data) upsertConversationScore(row as ConversationScore)
       }
-      for (const row of convRes.data ?? []) upsertConversationScore(row as ConversationScore)
+      setLoading(false)
     }
     loadScores()
 
@@ -108,5 +120,5 @@ export function useScores(conversationId: string | undefined): ConversationScore
     return ids
   }, [conversationScores])
 
-  return { messageScores, conversationScores, evidenceIds }
+  return { messageScores, conversationScores, evidenceIds, loading, error }
 }

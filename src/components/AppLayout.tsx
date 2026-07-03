@@ -9,11 +9,18 @@ import Avatar from './Avatar'
 export default function AppLayout() {
   const { user, profile } = useAuth()
   const [signingOut, setSigningOut] = useState(false)
+  const [logoutError, setLogoutError] = useState<string | null>(null)
 
   async function handleLogout() {
     setSigningOut(true)
-    await supabase.auth.signOut()
-    // No manual navigation needed — the auth state change triggers the redirect.
+    setLogoutError(null)
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      // Recover the button — otherwise it sticks on "Logging out…" forever.
+      setSigningOut(false)
+      setLogoutError("Couldn't log out. Check your connection and try again.")
+    }
+    // On success no manual navigation is needed — the auth state change triggers the redirect.
   }
 
   return (
@@ -51,6 +58,11 @@ export default function AppLayout() {
             </button>
           </div>
         </div>
+        {logoutError && (
+          <p className="border-t border-red-200 bg-red-50 px-4 py-1.5 text-sm text-red-700">
+            {logoutError}
+          </p>
+        )}
       </header>
       <main className="min-h-0 flex-1 overflow-y-auto">
         <Outlet />

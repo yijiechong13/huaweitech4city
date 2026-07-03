@@ -11,7 +11,7 @@ import ChatPane from '../components/ChatPane'
 export default function ChatPage() {
   const { conversationId } = useParams()
   const { conversations, loading, error } = useConversations()
-  const flaggedIds = useFlaggedConversations()
+  const { flaggedIds, error: flaggedError } = useFlaggedConversations()
   const friend = conversations.find((c) => c.conversationId === conversationId)?.friend
 
   return (
@@ -25,6 +25,7 @@ export default function ChatPage() {
           error={error}
           activeId={conversationId}
           flaggedIds={flaggedIds}
+          flaggedError={flaggedError}
         />
       </aside>
 

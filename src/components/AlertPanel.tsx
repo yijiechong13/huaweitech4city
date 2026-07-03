@@ -5,6 +5,8 @@ interface AlertPanelProps {
   conversationScores: ConversationScore[]
   messageScores: Map<string, MessageScore[]>
   messages: ChatMessage[]
+  loading?: boolean
+  error?: string | null
 }
 
 function percent(confidence: number | null): string | null {
@@ -14,9 +16,33 @@ function percent(confidence: number | null): string | null {
 // Alert detail for the open conversation — desktop right column and phone
 // pull-up sheet render this same component. Shows contract fields only
 // (label, confidence, evidence_msg_ids); the real model returns nothing else.
-export default function AlertPanel({ conversationScores, messageScores, messages }: AlertPanelProps) {
+export default function AlertPanel({
+  conversationScores,
+  messageScores,
+  messages,
+  loading,
+  error,
+}: AlertPanelProps) {
   const flaggedEntries = [...messageScores.entries()]
   const empty = conversationScores.length === 0 && flaggedEntries.length === 0
+
+  // A fetch failure must not fall through to the reassuring "No alerts" text.
+  if (error) {
+    return (
+      <div className="flex flex-col gap-4 p-4">
+        <h2 className="text-sm font-semibold text-slate-900">Safety alerts</h2>
+        <p className="text-sm text-red-600">Couldn't load safety alerts. Refresh to try again.</p>
+      </div>
+    )
+  }
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-4 p-4">
+        <h2 className="text-sm font-semibold text-slate-900">Safety alerts</h2>
+        <p className="text-sm text-slate-500">Checking for alerts…</p>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-4 p-4">
