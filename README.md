@@ -1,14 +1,18 @@
-## Setup Dataset Folder (to team members)
-1. Make sure you are in the root directory
-2. Create a new folder named "dataset" (case sensitve)
-3. In the "dataset" folder, create these folders with the names: "raw", "preprocessed"
+## Setup Dataset Folder
 
+From the repo root, create this structure:
 
-**About raw folder**
-This is where raw conversation datasets are stored. 
-Last updated: 6th July 2026 
-- Park the 3 datasets file: train.jsonl, test.jsonl, and validation.jsonl here
+```
+dataset/
+├── raw/
+└── preprocessed/
+```
 
+- **`raw/`** — place `train.jsonl`, `test.jsonl`, and `validation.jsonl` here (last updated: 6 Jul 2026)
+- **`preprocessed/`** — store processed conversation data here
 
-**About preprocessed folder**
-This is where the preprocessed conversation data are stored. 
+## PROJECT_CONTEXT.md
+
+Read this file before working with a coding agent — it holds shared project context and workflow.
+
+Update it when you make major changes (architecture, data schema, eval setup, etc.) so the team stays aligned.
