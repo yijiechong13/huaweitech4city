@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -13,6 +13,26 @@ export default function LoginPage() {
     e.preventDefault()
     setError(null)
     setPending(true)
+    // Usernames can't contain '@', so anything without one is a username:
+    // resolve it to an email via the SECURITY DEFINER lookup, then sign in
+    // with email+password as usual.
+    let email = identifier.trim()
+    if (!email.includes('@')) {
+      const { data, error: rpcError } = await supabase.rpc('get_email_for_username', {
+        _username: email,
+      })
+      if (rpcError) {
+        setError(rpcError.message)
+        setPending(false)
+        return
+      }
+      if (!data) {
+        setError('Username not found.')
+        setPending(false)
+        return
+      }
+      email = data as string
+    }
     // On success the auth listener updates the session and PublicOnlyRoute
     // redirects to "/", so no manual navigation is needed here.
     const { error } = await supabase.auth.signInWithPassword({ email, password })
@@ -30,16 +50,16 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-slate-700">
-              Email
+            <label htmlFor="identifier" className="block text-sm font-medium text-slate-700">
+              Email or username
             </label>
             <input
-              id="email"
-              type="email"
-              autoComplete="email"
+              id="identifier"
+              type="text"
+              autoComplete="username"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
             />
           </div>

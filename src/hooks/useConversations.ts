@@ -28,6 +28,8 @@ export function useConversations() {
     }
     function done(items: ConversationListItem[]) {
       setConversations(items)
+      // Realtime-triggered reloads retry naturally, so a transient failure self-heals.
+      setError(null)
       setLoading(false)
     }
 
@@ -89,9 +91,37 @@ export function useConversations() {
       )
     }
 
+    // Subscribe BEFORE fetching so no change lands between the initial fetch
+    // and the live stream. A conversation_members INSERT for me means a
+    // conversation was created for me — it fires for both the creator and
+    // the other member, and (unlike the conversations row) it can't arrive
+    // before the membership that grants RLS visibility -> refetch. Profile
+    // UPDATEs are patched in place so names/avatars stay live.
+    const channel = supabase
+      .channel(`conversations:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'conversation_members',
+          filter: `user_id=eq.${userId}`,
+        },
+        load,
+      )
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
+        if (cancelled) return
+        const updated = payload.new as Profile
+        setConversations((prev) =>
+          prev.map((c) => (c.friend.id === updated.id ? { ...c, friend: updated } : c)),
+        )
+      })
+      .subscribe()
+
     load()
     return () => {
       cancelled = true
+      supabase.removeChannel(channel)
     }
   }, [user?.id])
 

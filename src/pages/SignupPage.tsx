@@ -3,9 +3,16 @@ import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
+const USERNAME_RE = /^[a-z0-9_]{3,20}$/
+// SG numbers only, display-only (no OTP): +65 then 8 digits starting 6/8/9.
+const SG_PHONE_RE = /^\+65[689]\d{7}$/
+
 export default function SignupPage() {
+  const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   // Set when email confirmation is enabled and signup returns no session.
@@ -14,10 +21,49 @@ export default function SignupPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
+
+    const uname = username.trim()
+    if (!USERNAME_RE.test(uname)) {
+      setError('Username must be 3–20 characters: lowercase letters, numbers, and underscores.')
+      return
+    }
+
+    const tel = phone.replace(/[\s-]/g, '')
+    if (tel !== '' && !SG_PHONE_RE.test(tel)) {
+      setError('Phone must be a Singapore number like +6591234567.')
+      return
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+
     setPending(true)
-    // The handle_new_user() DB trigger creates the profiles row automatically,
-    // so we only collect email + password here.
-    const { data, error } = await supabase.auth.signUp({ email, password })
+
+    // Pre-check availability so a duplicate doesn't abort signup with an
+    // opaque database error from the profile trigger.
+    const { data: taken, error: rpcError } = await supabase.rpc('username_exists', {
+      _username: uname,
+    })
+    if (rpcError) {
+      setError(rpcError.message)
+      setPending(false)
+      return
+    }
+    if (taken) {
+      setError('That username is already taken.')
+      setPending(false)
+      return
+    }
+
+    // The handle_new_user() DB trigger creates the profiles row from this
+    // metadata (username, optional display-only phone).
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { username: uname, ...(tel ? { phone: tel } : {}) } },
+    })
     if (error) {
       setError(error.message)
       setPending(false)
@@ -59,6 +105,22 @@ export default function SignupPage() {
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
+            <label htmlFor="username" className="block text-sm font-medium text-slate-700">
+              Username
+            </label>
+            <input
+              id="username"
+              type="text"
+              autoComplete="username"
+              required
+              maxLength={20}
+              value={username}
+              onChange={(e) => setUsername(e.target.value.toLowerCase())}
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div>
             <label htmlFor="email" className="block text-sm font-medium text-slate-700">
               Email
             </label>
@@ -74,6 +136,22 @@ export default function SignupPage() {
           </div>
 
           <div>
+            <label htmlFor="phone" className="block text-sm font-medium text-slate-700">
+              Phone (optional)
+            </label>
+            <input
+              id="phone"
+              type="tel"
+              autoComplete="tel"
+              placeholder="+6591234567"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+            />
+            <p className="mt-1 text-xs text-slate-500">Singapore number, display only.</p>
+          </div>
+
+          <div>
             <label htmlFor="password" className="block text-sm font-medium text-slate-700">
               Password
             </label>
@@ -85,6 +163,22 @@ export default function SignupPage() {
               minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-700">
+              Confirm password
+            </label>
+            <input
+              id="confirmPassword"
+              type="password"
+              autoComplete="new-password"
+              required
+              minLength={6}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
             />
           </div>

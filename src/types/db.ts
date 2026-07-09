@@ -1,4 +1,4 @@
-// Database row types — mirrors supabase/migrations/001_init.sql exactly.
+// Database row types — mirrors supabase/migrations/ exactly.
 //
 // Conventions:
 //   uuid        -> string
@@ -16,6 +16,7 @@ export interface Profile {
   username: string | null;
   display_name: string | null;
   avatar_color: string | null;
+  phone: string | null;
 }
 
 export interface Friendship {

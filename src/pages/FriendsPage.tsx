@@ -1,72 +1,24 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import { useFriends } from '../hooks/useFriends'
 import { openOrCreateDm } from '../lib/conversations'
 import Avatar from '../components/Avatar'
 import type { Profile } from '../types/db'
-
-function sortByName(profiles: Profile[]): Profile[] {
-  return [...profiles].sort((a, b) =>
-    (a.display_name ?? a.username ?? '').localeCompare(b.display_name ?? b.username ?? ''),
-  )
-}
 
 export default function FriendsPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
 
-  const [friends, setFriends] = useState<Profile[]>([])
-  const [friendsLoading, setFriendsLoading] = useState(true)
+  const { friends, loading: friendsLoading, error: friendsError } = useFriends()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Profile[] | null>(null) // null = not searched yet
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [addingId, setAddingId] = useState<string | null>(null)
   const [openingId, setOpeningId] = useState<string | null>(null)
-
-  // Load the friends list. friendships references auth.users (not profiles),
-  // so PostgREST can't embed the join — fetch friend ids, then their profiles.
-  useEffect(() => {
-    const userId = user?.id
-    if (!userId) return
-    let cancelled = false
-
-    async function load() {
-      const { data: rows, error: friendshipsErr } = await supabase
-        .from('friendships')
-        .select('friend_id')
-        .eq('user_id', userId)
-      if (cancelled) return
-      if (friendshipsErr) {
-        setError(friendshipsErr.message)
-        setFriendsLoading(false)
-        return
-      }
-
-      const ids = rows.map((r) => r.friend_id)
-      if (ids.length === 0) {
-        setFriends([])
-        setFriendsLoading(false)
-        return
-      }
-
-      const { data: profiles, error: profilesErr } = await supabase
-        .from('profiles')
-        .select('*')
-        .in('id', ids)
-      if (cancelled) return
-      if (profilesErr) setError(profilesErr.message)
-      else setFriends(sortByName(profiles))
-      setFriendsLoading(false)
-    }
-
-    load()
-    return () => {
-      cancelled = true
-    }
-  }, [user?.id])
 
   async function handleSearch(e: FormEvent) {
     e.preventDefault()
@@ -112,9 +64,9 @@ export default function FriendsPage() {
           ? 'You are already friends with this user.'
           : insertErr.message,
       )
-    } else {
-      setFriends((prev) => sortByName([...prev, target]))
     }
+    // On success the realtime echo of our own friendships INSERT adds the
+    // friend to the list (useFriends), same as useMessages relies on its echo.
     setAddingId(null)
   }
 
@@ -154,7 +106,9 @@ export default function FriendsPage() {
         </button>
       </form>
 
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {(error ?? friendsError) && (
+        <p className="mt-2 text-sm text-red-600">{error ?? friendsError}</p>
+      )}
 
       {results !== null &&
         (results.length === 0 ? (

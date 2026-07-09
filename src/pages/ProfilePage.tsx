@@ -80,6 +80,9 @@ export default function ProfilePage() {
           {profile?.username && (
             <p className="truncate text-sm text-slate-500">@{profile.username}</p>
           )}
+          {profile?.phone && (
+            <p className="truncate text-sm text-slate-500">{profile.phone}</p>
+          )}
         </div>
       </div>
 
