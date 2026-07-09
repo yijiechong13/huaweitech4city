@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import ProfilePage from './pages/ProfilePage'
 import FriendsPage from './pages/FriendsPage'
 import ChatPage from './pages/ChatPage'
+import ReportsPage from './pages/ReportsPage'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -25,6 +26,7 @@ export default function App() {
           <Route path="/friends" element={<FriendsPage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/chat/:conversationId" element={<ChatPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
         </Route>
       </Route>
     </Routes>

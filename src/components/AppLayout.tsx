@@ -37,6 +37,9 @@ export default function AppLayout() {
             <Link to="/friends" className="text-sm font-medium text-slate-700 hover:text-slate-900">
               Friends
             </Link>
+            <Link to="/reports" className="text-sm font-medium text-slate-700 hover:text-slate-900">
+              Reports
+            </Link>
           </div>
           <div className="flex items-center gap-3">
             <Link to="/profile" className="flex min-w-0 items-center gap-2 hover:opacity-80">

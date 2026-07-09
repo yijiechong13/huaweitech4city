@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import { useMessages } from '../hooks/useMessages'
@@ -25,22 +25,26 @@ function MessageBubble({
   onRetry,
   scores,
   isEvidence,
+  isTarget,
 }: {
   msg: ChatMessage
   own: boolean
   onRetry: (id: string) => void
   scores?: MessageScore[]
   isEvidence?: boolean
+  isTarget?: boolean
 }) {
   // Directly flagged (red) beats evidence-of-conversation-score (amber).
   const flagged = scores !== undefined && scores.length > 0
   const highlight = flagged ? 'ring-2 ring-red-400' : isEvidence ? 'ring-2 ring-amber-400' : ''
+  // Deep-link flash uses outline so it stacks with the permanent ring flags.
+  const flash = isTarget ? 'outline-2 outline-offset-2 outline-emerald-500' : ''
   return (
-    <div className={`flex ${own ? 'justify-end' : 'justify-start'}`}>
+    <div id={`msg-${msg.id}`} className={`flex ${own ? 'justify-end' : 'justify-start'}`}>
       <div className="max-w-[75%]">
         <div
           title={new Date(msg.created_at).toLocaleString()}
-          className={`rounded-lg px-3 py-2 text-sm break-words whitespace-pre-wrap ${highlight} ${
+          className={`rounded-lg px-3 py-2 text-sm break-words whitespace-pre-wrap ${highlight} ${flash} ${
             own
               ? `bg-emerald-600 text-white ${msg.status === 'sending' ? 'opacity-60' : ''}`
               : flagged
@@ -93,12 +97,36 @@ export default function ChatPane({ conversationId, friend }: ChatPaneProps) {
   const [draft, setDraft] = useState('')
   const [alertsOpen, setAlertsOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  // Deep-link target from /reports (?msg=<id>). Handled once per mount; the
+  // key={conversationId} remount in ChatPage resets it per conversation.
+  const [searchParams] = useSearchParams()
+  const targetMsgId = searchParams.get('msg')
+  const targetHandled = useRef(false)
+  const [flashId, setFlashId] = useState<string | null>(null)
 
   const alertCount = conversationScores.length + messageScores.size
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView()
-  }, [messages.length, loading])
+    if (loading) return
+    if (targetMsgId && !targetHandled.current) {
+      const el = document.getElementById(`msg-${targetMsgId}`)
+      if (el) {
+        targetHandled.current = true
+        el.scrollIntoView({ block: 'center' })
+        setFlashId(targetMsgId)
+        return
+      }
+      // Target older than the loaded history window — fall through to bottom.
+    }
+    // Once the target is shown, new arrivals must not yank the view to bottom.
+    if (!targetHandled.current) bottomRef.current?.scrollIntoView()
+  }, [messages.length, loading, targetMsgId])
+
+  useEffect(() => {
+    if (!flashId) return
+    const t = setTimeout(() => setFlashId(null), 1600)
+    return () => clearTimeout(t)
+  }, [flashId])
 
   // Mark the conversation read on open and whenever a new message lands while
   // it's open. Fire-and-forget: the realtime echo of this UPDATE is what
@@ -173,6 +201,7 @@ export default function ChatPane({ conversationId, friend }: ChatPaneProps) {
                 onRetry={retry}
                 scores={messageScores.get(m.id)}
                 isEvidence={evidenceIds.has(m.id)}
+                isTarget={m.id === flashId}
               />
             ))
           )}
