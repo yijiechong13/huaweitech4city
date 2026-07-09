@@ -17,6 +17,8 @@ export interface Profile {
   display_name: string | null;
   avatar_color: string | null;
   phone: string | null;
+  bio: string | null;
+  created_at: string;
 }
 
 export interface Friendship {
@@ -28,12 +30,14 @@ export interface Friendship {
 export interface Conversation {
   id: string;
   is_group: boolean;
+  dm_key: string | null;
   created_at: string;
 }
 
 export interface ConversationMember {
   conversation_id: string;
   user_id: string;
+  last_read_at: string;
 }
 
 export interface Message {

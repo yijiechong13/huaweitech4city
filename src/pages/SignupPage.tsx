@@ -2,10 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-
-const USERNAME_RE = /^[a-z0-9_]{3,20}$/
-// SG numbers only, display-only (no OTP): +65 then 8 digits starting 6/8/9.
-const SG_PHONE_RE = /^\+65[689]\d{7}$/
+import { USERNAME_RE, SG_PHONE_RE } from '../lib/validators'
 
 export default function SignupPage() {
   const [username, setUsername] = useState('')

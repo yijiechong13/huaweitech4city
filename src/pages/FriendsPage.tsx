@@ -19,6 +19,9 @@ export default function FriendsPage() {
   const [error, setError] = useState<string | null>(null)
   const [addingId, setAddingId] = useState<string | null>(null)
   const [openingId, setOpeningId] = useState<string | null>(null)
+  // Friends added in this session — bridges the gap until the realtime echo
+  // updates useFriends, and switches the row's button to "Say hi".
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set())
 
   async function handleSearch(e: FormEvent) {
     e.preventDefault()
@@ -64,6 +67,8 @@ export default function FriendsPage() {
           ? 'You are already friends with this user.'
           : insertErr.message,
       )
+    } else {
+      setAddedIds((prev) => new Set(prev).add(target.id))
     }
     // On success the realtime echo of our own friendships INSERT adds the
     // friend to the list (useFriends), same as useMessages relies on its echo.
@@ -75,7 +80,7 @@ export default function FriendsPage() {
     setError(null)
     setOpeningId(friend.id)
     try {
-      const conversationId = await openOrCreateDm(user.id, friend.id)
+      const conversationId = await openOrCreateDm(friend.id)
       navigate(`/chat/${conversationId}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not open the chat.')
@@ -116,7 +121,7 @@ export default function FriendsPage() {
         ) : (
           <ul className="mt-4 divide-y divide-slate-200 rounded-md border border-slate-200 bg-white">
             {results.map((r) => {
-              const isFriend = friends.some((f) => f.id === r.id)
+              const isFriend = friends.some((f) => f.id === r.id) || addedIds.has(r.id)
               return (
                 <li key={r.id} className="flex items-center gap-3 px-3 py-2">
                   <Avatar size="sm" name={r.display_name ?? r.username} color={r.avatar_color} />
@@ -129,7 +134,13 @@ export default function FriendsPage() {
                     )}
                   </div>
                   {isFriend ? (
-                    <span className="shrink-0 text-xs text-slate-400">Friends</span>
+                    <button
+                      onClick={() => handleOpenChat(r)}
+                      disabled={openingId !== null}
+                      className="shrink-0 rounded-md border border-emerald-600 px-3 py-1 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                    >
+                      {openingId === r.id ? 'Opening…' : addedIds.has(r.id) ? 'Say hi' : 'Chat'}
+                    </button>
                   ) : (
                     <button
                       onClick={() => handleAdd(r)}

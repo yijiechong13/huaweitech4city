@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { supabase } from '../lib/supabase'
 import { useMessages } from '../hooks/useMessages'
 import type { ChatMessage } from '../hooks/useMessages'
 import { useScores } from '../hooks/useScores'
@@ -98,6 +99,22 @@ export default function ChatPane({ conversationId, friend }: ChatPaneProps) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView()
   }, [messages.length, loading])
+
+  // Mark the conversation read on open and whenever a new message lands while
+  // it's open. Fire-and-forget: the realtime echo of this UPDATE is what
+  // clears the unread dot in useConversations (and in other tabs).
+  const lastMessageId = messages[messages.length - 1]?.id
+  useEffect(() => {
+    if (!user) return
+    supabase
+      .from('conversation_members')
+      .update({ last_read_at: new Date().toISOString() })
+      .eq('conversation_id', conversationId)
+      .eq('user_id', user.id)
+      .then(({ error: readErr }) => {
+        if (readErr) console.error('mark-read failed:', readErr.message)
+      })
+  }, [conversationId, user, lastMessageId])
 
   function handleSend(e: FormEvent) {
     e.preventDefault()
