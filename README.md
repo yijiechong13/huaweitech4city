@@ -34,7 +34,7 @@ See `PROJECT_CONTEXT.md` section 6 for the canonical schema.
 
 Same conversations and labels as `raw_dataset/`, but each message's `content` has been passed through the preprocessing pipeline. Structure and labels are unchanged; only message text is transformed.
 
-See `preprocess/preprocessing_doc.md` for what preprocessing does.
+See `docs/preprocessing_doc.md` for what preprocessing does.
 
 ---
 

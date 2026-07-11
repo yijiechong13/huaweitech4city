@@ -1,0 +1,22 @@
+"""
+Shared constants. EMBED_DIM is the one you must change to match whatever
+sentence-embedding model you plug in upstream (e.g. LaBSE=768,
+multilingual-e5-base=768, paraphrase-multilingual-MiniLM-L12-v2=384).
+Everything downstream (the message graph's input projection) reads from this
+constant, so changing it here is enough to re-fit the whole pipeline to your
+embeddings.
+"""
+
+EMBED_DIM = 1024         # <-- CHANGE ME to match your embedding model's output dim
+HIDDEN_DIM = 256         # GraphSAGE hidden size (independent of EMBED_DIM)
+
+SAME_SPEAKER_WINDOW = 5  # a message links to at most this many of its sender's
+                          # most recent prior messages — bounds per-message cost
+                          # in the incremental path regardless of conversation length
+
+CONV_LABELS = ["safe", "harmful"]  # binary vocabulary, matches the canonical
+                                    # `binary_conversation_label` schema field exactly
+
+TOP_K_EVIDENCE = 3       # how many messages get forwarded to the LLM stage as evidence
+
+LLM_MODEL = "claude-haiku-4-5-20251001"  # small/fast model — reasoning over a handful of pre-scored messages, not raw generation
