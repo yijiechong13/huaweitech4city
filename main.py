@@ -1,24 +1,31 @@
 """
-End-to-end workflow demo: mocked message embeddings -> message graph
-construction -> GraphSAGE -> conversation-level binary score (+ per-message
-evidence scores as a byproduct) -> LLM reasoning stage.
+ARCHITECTURE VERIFICATION DEMO -- not the real pipeline. For that, see
+pipeline.py, which runs real preprocessing + real embeddings + a
+trained-or-newly-trained model over an actual dataset.
 
-Demonstrates BOTH call paths from gnn/conversation_gnn.py:
-  - streaming (ConversationGraphState.add_message): messages fed in one at a
-    time, exactly as production would receive them -- the graph is extended
-    and only the new message's local neighborhood is processed, never a
-    full rebuild.
-  - batch (build_message_graph + model.forward_full): the same messages
-    scored in one shot, as a cold-start/backfill path would. Its final
-    conv_score should match the streaming path's final value, since both
-    drive the same trained weights over the same (directed) graph -- this
-    is a cheap correctness check that the two paths actually agree.
+This script exists to answer a narrower question cheaply and quickly, with
+no external dependencies (no sentence-transformers, no model download, no
+dataset required): "does the gnn/conversation_gnn.py architecture itself
+still behave correctly?" It does that by exercising two things pipeline.py
+never touches:
 
-Everything here is untrained (random init weights), so scores are
-meaningless numerically -- this demo verifies data-flow/shapes and
-streaming/batch equivalence, not prediction quality. Swap in a real,
-trained embedding model + trained weights before drawing conclusions from
-output.
+  1. Streaming vs batch equivalence -- gnn/conversation_gnn.py offers two
+     ways to drive MessageGraphSAGE: build_message_graph + forward_full
+     (batch, scores a fully-known conversation in one shot) and
+     ConversationGraphState.add_message (streaming, extends the graph one
+     message at a time as production would receive them, touching only
+     the new message's local neighborhood). Both must produce the same
+     conv_score from the same weights -- this script feeds the same mock
+     conversation through both paths and checks they agree. If a future
+     change to conversation_gnn.py breaks that invariant, this is what
+     catches it.
+  2. The LLM reasoning stage (gnn/llm_stage.py) end to end.
+
+Message embeddings are mocked (torch.randn) and the model is randomly
+initialized -- deliberately, since real embeddings/weights are irrelevant
+to what this script checks. Scores printed here are numerically
+meaningless; do not read them as predictions. For real predictions on real
+data, run pipeline.py instead.
 """
 
 import torch

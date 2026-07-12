@@ -27,8 +27,9 @@ doing if training throughput becomes a bottleneck, not implemented here.
 Usage:
     python train.py \\
         --train-embeddings path/to/train_embeddings.<ext> \\
-        --val-embeddings path/to/val_embeddings.<ext> \\
-        --test-embeddings path/to/test_embeddings.<ext>
+        --val-embeddings path/to/val_embeddings.<ext>
+    (--test-jsonl/--test-embeddings are optional; test evaluation is skipped
+    if not both provided.)
 """
 
 import argparse
@@ -132,10 +133,10 @@ def prepare_example(conversation: dict, embeddings: dict):
     return messages, label
 
 
-def macro_f1(y_true: list, y_pred: list) -> float:
-    """Hand-rolled macro-F1 for binary 0/1 labels (avoids adding sklearn as
-    a dependency for one metric); matches PROJECT_CONTEXT.md's eval metric."""
-    f1s = []
+def per_class_stats(y_true: list, y_pred: list) -> dict:
+    """Precision/recall/F1 per class (0=safe, 1=harmful) plus confusion
+    counts -- the detail behind the single macro_f1() number below."""
+    stats = {}
     for cls in (0, 1):
         tp = sum(1 for t, p in zip(y_true, y_pred) if t == cls and p == cls)
         fp = sum(1 for t, p in zip(y_true, y_pred) if t != cls and p == cls)
@@ -143,8 +144,15 @@ def macro_f1(y_true: list, y_pred: list) -> float:
         precision = tp / (tp + fp) if (tp + fp) else 0.0
         recall = tp / (tp + fn) if (tp + fn) else 0.0
         f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
-        f1s.append(f1)
-    return sum(f1s) / len(f1s)
+        stats[cls] = {"precision": precision, "recall": recall, "f1": f1, "tp": tp, "fp": fp, "fn": fn}
+    return stats
+
+
+def macro_f1(y_true: list, y_pred: list) -> float:
+    """Hand-rolled macro-F1 for binary 0/1 labels (avoids adding sklearn as
+    a dependency for one metric); matches PROJECT_CONTEXT.md's eval metric."""
+    stats = per_class_stats(y_true, y_pred)
+    return sum(s["f1"] for s in stats.values()) / len(stats)
 
 
 def train_epoch(model, examples, optimizer, pos_weight: float) -> float:
@@ -166,7 +174,7 @@ def train_epoch(model, examples, optimizer, pos_weight: float) -> float:
 
 
 @torch.no_grad()
-def evaluate(model, examples, threshold: float = 0.5) -> float:
+def predict_all(model, examples, threshold: float = 0.5):
     model.eval()
     y_true, y_pred = [], []
     for messages, label in examples:
@@ -174,17 +182,68 @@ def evaluate(model, examples, threshold: float = 0.5) -> float:
         conv_score, _ = model.forward_full(graph)
         y_true.append(int(label))
         y_pred.append(int(conv_score.item() >= threshold))
+    return y_true, y_pred
+
+
+def evaluate(model, examples, threshold: float = 0.5) -> float:
+    y_true, y_pred = predict_all(model, examples, threshold)
     return macro_f1(y_true, y_pred)
+
+
+def print_validation_report(model, examples, threshold: float = 0.5):
+    """The distinct, clearly-labeled 'run the validation set over the
+    trained model' step -- same predictions as evaluate(), but broken down
+    per class instead of collapsed into one macro-F1 number."""
+    y_true, y_pred = predict_all(model, examples, threshold)
+    stats = per_class_stats(y_true, y_pred)
+    label_name = {0: "safe", 1: "harmful"}
+    print(f"\nValidation report ({len(examples)} conversations):")
+    for cls in (0, 1):
+        s = stats[cls]
+        print(f"  {label_name[cls]:8s}  precision={s['precision']:.4f}  recall={s['recall']:.4f}  "
+              f"f1={s['f1']:.4f}  (tp={s['tp']} fp={s['fp']} fn={s['fn']})")
+    print(f"  macro_f1={sum(s['f1'] for s in stats.values()) / len(stats):.4f}")
+
+
+def train_model(train_examples, val_examples, epochs: int, lr: float, pos_weight: float, checkpoint_path) -> MessageGraphSAGE:
+    """
+    The actual training loop, factored out of main() so other entry points
+    (e.g. pipeline.py's train-if-no-checkpoint-exists path) can reuse it
+    without going through argparse/CLI. Saves to checkpoint_path on every
+    new best val_macro_f1, then reloads that best checkpoint before
+    returning -- the returned model is always the best-val epoch, never
+    whatever the last epoch happened to be.
+    """
+    model = MessageGraphSAGE()
+    optimizer = Adam(model.parameters(), lr=lr)
+
+    checkpoint_path = Path(checkpoint_path)
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+
+    best_val_f1 = -1.0
+    for epoch in range(1, epochs + 1):
+        train_loss = train_epoch(model, train_examples, optimizer, pos_weight)
+        val_f1 = evaluate(model, val_examples)
+        marker = ""
+        if val_f1 > best_val_f1:
+            best_val_f1 = val_f1
+            torch.save(model.state_dict(), checkpoint_path)
+            marker = "  <- new best, saved"
+        print(f"epoch {epoch:3d}  train_loss={train_loss:.4f}  val_macro_f1={val_f1:.4f}{marker}")
+
+    print(f"\nLoading best checkpoint (val_macro_f1={best_val_f1:.4f})...")
+    model.load_state_dict(torch.load(checkpoint_path))
+    return model
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--train-jsonl", default="dataset/raw_dataset/train.jsonl")
     parser.add_argument("--val-jsonl", default="dataset/raw_dataset/validation.jsonl")
-    parser.add_argument("--test-jsonl", default="dataset/raw_dataset/test.jsonl")
+    parser.add_argument("--test-jsonl", default=None, help="optional -- skipped if not provided")
     parser.add_argument("--train-embeddings", required=True)
     parser.add_argument("--val-embeddings", required=True)
-    parser.add_argument("--test-embeddings", required=True)
+    parser.add_argument("--test-embeddings", default=None, help="optional -- skipped if not provided")
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--pos-weight", type=float, default=1.0,
@@ -203,31 +262,17 @@ def main():
     ]
     print(f"  train={len(train_examples)} conversations, val={len(val_examples)} conversations")
 
-    model = MessageGraphSAGE()
-    optimizer = Adam(model.parameters(), lr=args.lr)
+    model = train_model(train_examples, val_examples, args.epochs, args.lr, args.pos_weight, args.checkpoint)
 
-    checkpoint_path = Path(args.checkpoint)
-    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    print_validation_report(model, val_examples)
 
-    best_val_f1 = -1.0
-    for epoch in range(1, args.epochs + 1):
-        train_loss = train_epoch(model, train_examples, optimizer, args.pos_weight)
-        val_f1 = evaluate(model, val_examples)
-        marker = ""
-        if val_f1 > best_val_f1:
-            best_val_f1 = val_f1
-            torch.save(model.state_dict(), checkpoint_path)
-            marker = "  <- new best, saved"
-        print(f"epoch {epoch:3d}  train_loss={train_loss:.4f}  val_macro_f1={val_f1:.4f}{marker}")
-
-    print(f"\nLoading best checkpoint (val_macro_f1={best_val_f1:.4f}) for test evaluation...")
-    model.load_state_dict(torch.load(checkpoint_path))
-    test_examples = [
-        prepare_example(c, load_embeddings(args.test_embeddings))
-        for c in load_conversations(args.test_jsonl)
-    ]
-    test_f1 = evaluate(model, test_examples)
-    print(f"test_macro_f1={test_f1:.4f}")
+    if args.test_jsonl and args.test_embeddings:
+        test_examples = [
+            prepare_example(c, load_embeddings(args.test_embeddings))
+            for c in load_conversations(args.test_jsonl)
+        ]
+        test_f1 = evaluate(model, test_examples)
+        print(f"\ntest_macro_f1={test_f1:.4f}")
 
 
 if __name__ == "__main__":
