@@ -47,7 +47,7 @@ def load_embedding_model(model_name: str = DEFAULT_MODEL) -> SentenceTransformer
     print(f"Loading {model_name} on device={device}...")
     model = SentenceTransformer(model_name, device=device)
 
-    actual_dim = model.get_sentence_embedding_dimension()
+    actual_dim = model.get_embedding_dimension()
     if actual_dim != EMBED_DIM:
         print(
             f"WARNING: model's embedding dim ({actual_dim}) != gnn.config.EMBED_DIM "

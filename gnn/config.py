@@ -7,7 +7,9 @@ constant, so changing it here is enough to re-fit the whole pipeline to your
 embeddings.
 """
 
-EMBED_DIM = 1024         # <-- CHANGE ME to match your embedding model's output dim
+EMBED_DIM = 1024         # aisingapore/SEA-LION-ModernBERT-Embedding-600M (see embed.py's
+                          # DEFAULT_MODEL) -- CHANGE ME (and embed.py's DEFAULT_MODEL) together
+                          # if you swap encoders, they must always agree
 HIDDEN_DIM = 256         # GraphSAGE hidden size (independent of EMBED_DIM)
 
 SAME_SPEAKER_WINDOW = 5  # a message links to at most this many of its sender's

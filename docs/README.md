@@ -29,7 +29,14 @@ flowchart LR
 Code: [`gnn/conversation_gnn.py`](../gnn/conversation_gnn.py) (graph
 construction + model), [`gnn/llm_stage.py`](../gnn/llm_stage.py) (LLM
 stage), [`gnn/config.py`](../gnn/config.py) (shared constants),
-[`main.py`](../main.py) (end-to-end demo).
+[`main.py`](../main.py) (architecture-verification demo, mock data).
+
+For the real, trained pipeline (not this doc's focus, which is the
+architecture itself): [`embed.py`](../embed.py) (preprocess + real
+embeddings), [`train.py`](../train.py) (training loop), and
+[`pipeline.py`](../pipeline.py) (the orchestrator — trains a checkpoint if
+none exists, otherwise loads one, then runs every stage over a given
+file). See the root [README.md](../README.md) for how to run these.
 
 ## Message graph construction
 
@@ -164,11 +171,16 @@ direct display to the user.
 
 ## Known limitations
 
-- **Everything is currently untrained** (random init). The demo in
-  [`main.py`](../main.py) verifies data-flow/shapes and streaming/batch
-  equivalence, not prediction quality.
-- **Labeled data is the real bottleneck**, not model architecture — see
-  `PROJECT_CONTEXT.md` for the broader data-scarcity discussion.
+- **`main.py` is always untrained by design** (random init) — it verifies
+  data-flow/shapes and streaming/batch equivalence, not prediction
+  quality, and is meant to stay that way. A real trained checkpoint comes
+  from `train.py`/`pipeline.py` instead, run against real labeled data.
+- **Labeled data is still the main lever on quality**, not model
+  architecture — see `PROJECT_CONTEXT.md` for the broader data-scarcity
+  discussion. There is currently no held-out **test** split (only
+  train/validation), so reported validation numbers double as the
+  checkpoint-selection signal — a true test set, scored only once at the
+  end, would be needed for a fully unbiased final number.
 - **No cross-conversation modeling in this version.** A user running the
   same pattern across separate conversations with different people is not
   currently caught — each conversation is scored independently.

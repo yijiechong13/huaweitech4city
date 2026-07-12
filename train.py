@@ -5,7 +5,8 @@ Expects:
   - JSONL conversation files in the canonical schema (PROJECT_CONTEXT.md §6):
     one conversation per line, with a "messages" list and a top-level
     "binary_conversation_label" ("harmful"/"safe"). README.md's documented
-    layout is dataset/raw_dataset/{train,validation,test}.jsonl.
+    layout is dataset/{train,validation}.jsonl (no held-out test split yet
+    -- --test-jsonl/--test-embeddings are optional, see Usage below).
   - A separate embeddings file per split, mapping message_id -> vector.
     Format is auto-detected by extension in load_embeddings() below -- if
     your actual embeddings file doesn't match one of the supported shapes,
@@ -238,8 +239,8 @@ def train_model(train_examples, val_examples, epochs: int, lr: float, pos_weight
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--train-jsonl", default="dataset/raw_dataset/train.jsonl")
-    parser.add_argument("--val-jsonl", default="dataset/raw_dataset/validation.jsonl")
+    parser.add_argument("--train-jsonl", default="dataset/train.jsonl")
+    parser.add_argument("--val-jsonl", default="dataset/validation.jsonl")
     parser.add_argument("--test-jsonl", default=None, help="optional -- skipped if not provided")
     parser.add_argument("--train-embeddings", required=True)
     parser.add_argument("--val-embeddings", required=True)
