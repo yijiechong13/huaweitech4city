@@ -16,6 +16,10 @@ SAME_SPEAKER_WINDOW = 5  # a message links to at most this many of its sender's
                           # most recent prior messages — bounds per-message cost
                           # in the incremental path regardless of conversation length
 
+DROPOUT = 0.3            # applied after input_proj and after each GraphSAGE layer's
+                          # ReLU (MessageGraphSAGE) -- a no-op at inference (model.eval()),
+                          # only active during train_model()'s training loop
+
 CONV_LABELS = ["safe", "harmful"]  # binary vocabulary, matches the canonical
                                     # `binary_conversation_label` schema field exactly
 

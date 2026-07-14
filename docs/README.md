@@ -77,7 +77,13 @@ accept fine, falling back to each node's own (root) transform only.
 
 `input_proj` (`Linear(EMBED_DIM, HIDDEN_DIM)`) → 2 layers of
 `HeteroConv({temporal, same_speaker, reply_to}: SAGEConv, aggr='mean')` +
-ReLU → a single bare `Linear(HIDDEN_DIM, 1)` `conv_head`.
+ReLU → a single bare `Linear(HIDDEN_DIM, 1)` `conv_head`. `nn.Dropout(DROPOUT)`
+is applied after `input_proj` and after each layer's ReLU, in both
+`forward_full` and `ConversationGraphState`'s incremental path (same
+module instance either way) — added to counter memorization given a
+~1M-parameter model trained on a few hundred conversations (see Known
+Limitations). It's a no-op once `model.eval()` is set, which is the only
+mode the incremental path is ever driven in.
 
 No positional embedding table (message order is now structural, via
 `temporal` edges) and no sender embedding table (identity is structural,
@@ -181,6 +187,18 @@ direct display to the user.
   train/validation), so reported validation numbers double as the
   checkpoint-selection signal — a true test set, scored only once at the
   end, would be needed for a fully unbiased final number.
+- **Regularization (dropout + AdamW weight decay, both in `train.py`'s
+  `train_model()`) fixes memorization, not shortcut learning.** Added
+  after an early run showed `train_loss` collapsing to exactly `0.0000` by
+  ~epoch 15 on ~800 training conversations against a ~1M-parameter model.
+  These knobs reduce the model's tendency to memorize individual training
+  examples, but they do **not** stop it from keying on a trivial
+  label-correlated feature across the *whole* dataset (e.g. scam messages
+  almost always containing an OTP/URL token) — that failure mode needs
+  counterexamples in the training data itself (safe messages that mention
+  banks/OTPs legitimately, harmful ones that don't), not a smaller/more
+  regularized model. `--patience` (opt-in, off by default) adds early
+  stopping on top of the existing best-checkpoint selection.
 - **No cross-conversation modeling in this version.** A user running the
   same pattern across separate conversations with different people is not
   currently caught — each conversation is scored independently.

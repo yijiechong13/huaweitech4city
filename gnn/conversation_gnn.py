@@ -40,7 +40,7 @@ import torch.nn.functional as F
 from torch_geometric.data import HeteroData
 from torch_geometric.nn import HeteroConv, SAGEConv
 
-from .config import EMBED_DIM, HIDDEN_DIM, SAME_SPEAKER_WINDOW
+from .config import EMBED_DIM, HIDDEN_DIM, SAME_SPEAKER_WINDOW, DROPOUT
 
 _RELATIONS = ("temporal", "same_speaker", "reply_to")
 
@@ -129,12 +129,22 @@ class MessageGraphSAGE(nn.Module):
     Per-message scores derived this way are a ranking/"contribution to the
     verdict" signal, not an independently-calibrated probability that that
     message alone is harmful -- treat them as a score, not a probability.
+
+    Regularization: dropout is applied after input_proj and after each
+    GraphSAGE layer's ReLU, in both forward_full and the incremental path
+    (ConversationGraphState.add_message) -- same nn.Dropout module
+    instance either way, so it's governed by the same .training flag and
+    behaves identically (a no-op) once model.eval() is set, which is the
+    only mode ConversationGraphState is ever driven in. Added specifically
+    to counter memorization on a small (~800-conversation) dataset with a
+    ~1M-parameter model -- see docs/README.md's Known Limitations.
     """
 
-    def __init__(self, embed_dim=EMBED_DIM, hidden_dim=HIDDEN_DIM, num_layers=2):
+    def __init__(self, embed_dim=EMBED_DIM, hidden_dim=HIDDEN_DIM, num_layers=2, dropout=DROPOUT):
         super().__init__()
         self.hidden_dim = hidden_dim
         self.input_proj = nn.Linear(embed_dim, hidden_dim)
+        self.dropout = nn.Dropout(dropout)
 
         self.layers = nn.ModuleList()
         for _ in range(num_layers):
@@ -157,11 +167,11 @@ class MessageGraphSAGE(nn.Module):
             per_message_scores: FloatTensor [seq_len] -- sigmoid of each
                 message's additive contribution to the conv logit above.
         """
-        x_dict = {'message': self.input_proj(data.x_dict['message'])}
+        x_dict = {'message': self.dropout(self.input_proj(data.x_dict['message']))}
 
         for layer in self.layers:
             x_dict = layer(x_dict, data.edge_index_dict)
-            x_dict = {k: F.relu(v) for k, v in x_dict.items()}
+            x_dict = {k: self.dropout(F.relu(v)) for k, v in x_dict.items()}
 
         node_embeddings = x_dict['message']              # [seq_len, hidden_dim]
         conv_embedding = node_embeddings.mean(dim=0)       # [hidden_dim]
@@ -266,13 +276,13 @@ class ConversationGraphState:
         }
         all_neighbor_idxs = set(temporal_neighbors) | set(same_speaker_neighbors) | set(reply_to_neighbors)
 
-        h = self.model.input_proj(embedding)
+        h = self.model.dropout(self.model.input_proj(embedding))
         self.layer0.append(h)
 
         for layer_i, hetero_conv_layer in enumerate(self.model.layers):
             source_cache = self.layer0 if layer_i == 0 else self.layer_states[layer_i - 1]
             neighbor_features = {g: source_cache[g] for g in all_neighbor_idxs}
-            h = self.model._incremental_step(hetero_conv_layer, h, neighbor_features, relation_neighbors)
+            h = self.model.dropout(self.model._incremental_step(hetero_conv_layer, h, neighbor_features, relation_neighbors))
             self.layer_states[layer_i].append(h)
 
         final_embedding = h

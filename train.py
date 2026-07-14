@@ -41,7 +41,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from torch.optim import Adam
+from torch.optim import AdamW
 
 from gnn.conversation_gnn import build_message_graph, MessageGraphSAGE
 
@@ -206,7 +206,8 @@ def print_validation_report(model, examples, threshold: float = 0.5):
     print(f"  macro_f1={sum(s['f1'] for s in stats.values()) / len(stats):.4f}")
 
 
-def train_model(train_examples, val_examples, epochs: int, lr: float, pos_weight: float, checkpoint_path) -> MessageGraphSAGE:
+def train_model(train_examples, val_examples, epochs: int, lr: float, pos_weight: float, checkpoint_path,
+                 weight_decay: float = 1e-4, patience: int = None) -> MessageGraphSAGE:
     """
     The actual training loop, factored out of main() so other entry points
     (e.g. pipeline.py's train-if-no-checkpoint-exists path) can reuse it
@@ -214,23 +215,42 @@ def train_model(train_examples, val_examples, epochs: int, lr: float, pos_weight
     new best val_macro_f1, then reloads that best checkpoint before
     returning -- the returned model is always the best-val epoch, never
     whatever the last epoch happened to be.
+
+    Regularization knobs (see MessageGraphSAGE.__init__ for dropout, applied
+    inside the model itself): weight_decay uses AdamW, not plain Adam --
+    Adam's L2 term doesn't decouple correctly from its adaptive per-parameter
+    learning rate (Loshchilov & Hutter, "Decoupled Weight Decay
+    Regularization"), so AdamW is the correct choice whenever weight decay
+    is actually wanted, not just a style preference. patience is optional
+    (None = disabled, matching the original always-run-all-epochs behavior)
+    -- if set, training stops once `patience` epochs pass with no new best
+    val_macro_f1, since after that point every epoch is only deepening
+    memorization (see docs/README.md's Known Limitations).
     """
     model = MessageGraphSAGE()
-    optimizer = Adam(model.parameters(), lr=lr)
+    optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
 
     checkpoint_path = Path(checkpoint_path)
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
     best_val_f1 = -1.0
+    epochs_since_best = 0
     for epoch in range(1, epochs + 1):
         train_loss = train_epoch(model, train_examples, optimizer, pos_weight)
         val_f1 = evaluate(model, val_examples)
         marker = ""
         if val_f1 > best_val_f1:
             best_val_f1 = val_f1
+            epochs_since_best = 0
             torch.save(model.state_dict(), checkpoint_path)
             marker = "  <- new best, saved"
+        else:
+            epochs_since_best += 1
         print(f"epoch {epoch:3d}  train_loss={train_loss:.4f}  val_macro_f1={val_f1:.4f}{marker}")
+
+        if patience is not None and epochs_since_best >= patience:
+            print(f"  no improvement in {patience} epochs, stopping early at epoch {epoch}")
+            break
 
     print(f"\nLoading best checkpoint (val_macro_f1={best_val_f1:.4f})...")
     model.load_state_dict(torch.load(checkpoint_path))
@@ -249,6 +269,11 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--pos-weight", type=float, default=1.0,
                          help="loss multiplier for 'harmful' examples, to counter class imbalance")
+    parser.add_argument("--weight-decay", type=float, default=1e-4,
+                         help="AdamW weight decay -- regularization against the small dataset size")
+    parser.add_argument("--patience", type=int, default=None,
+                         help="stop early after this many epochs with no new best val_macro_f1 "
+                              "(default: disabled, always runs all --epochs)")
     parser.add_argument("--checkpoint", default="checkpoints/message_graph_sage.pt")
     args = parser.parse_args()
 
@@ -263,7 +288,8 @@ def main():
     ]
     print(f"  train={len(train_examples)} conversations, val={len(val_examples)} conversations")
 
-    model = train_model(train_examples, val_examples, args.epochs, args.lr, args.pos_weight, args.checkpoint)
+    model = train_model(train_examples, val_examples, args.epochs, args.lr, args.pos_weight, args.checkpoint,
+                         weight_decay=args.weight_decay, patience=args.patience)
 
     print_validation_report(model, val_examples)
 

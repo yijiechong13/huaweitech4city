@@ -41,7 +41,8 @@ from train import (
 from gnn.conversation_gnn import build_message_graph, MessageGraphSAGE
 
 
-def bootstrap_checkpoint(checkpoint_path, embed_model, epochs: int, lr: float, pos_weight: float) -> MessageGraphSAGE:
+def bootstrap_checkpoint(checkpoint_path, embed_model, epochs: int, lr: float, pos_weight: float,
+                          weight_decay: float, patience: int) -> MessageGraphSAGE:
     """No checkpoint exists yet -- train one from scratch on the canonical
     training split before this script can do anything else. Takes an
     already-loaded embed_model so the (slow-ish) model load only happens
@@ -58,7 +59,8 @@ def bootstrap_checkpoint(checkpoint_path, embed_model, epochs: int, lr: float, p
     val_examples = [prepare_example(c, val_embeddings) for c in val_convs]
     print(f"  train={len(train_examples)} conversations, val={len(val_examples)} conversations\n")
 
-    model = train_model(train_examples, val_examples, epochs, lr, pos_weight, checkpoint_path)
+    model = train_model(train_examples, val_examples, epochs, lr, pos_weight, checkpoint_path,
+                         weight_decay=weight_decay, patience=patience)
     print_validation_report(model, val_examples)
     return model
 
@@ -116,6 +118,9 @@ def main():
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--pos-weight", type=float, default=1.0)
+    parser.add_argument("--weight-decay", type=float, default=1e-4)
+    parser.add_argument("--patience", type=int, default=None,
+                         help="stop early after this many epochs with no new best val_macro_f1")
     args = parser.parse_args()
 
     checkpoint_path = Path(args.checkpoint)
@@ -126,7 +131,8 @@ def main():
         model = MessageGraphSAGE()
         model.load_state_dict(torch.load(checkpoint_path, map_location="cpu"))
     else:
-        model = bootstrap_checkpoint(checkpoint_path, embed_model, args.epochs, args.lr, args.pos_weight)
+        model = bootstrap_checkpoint(checkpoint_path, embed_model, args.epochs, args.lr, args.pos_weight,
+                                      args.weight_decay, args.patience)
 
     run_inference(model, args.input_jsonl, embed_model)
 
