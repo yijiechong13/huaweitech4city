@@ -64,5 +64,7 @@ export interface ConversationScore {
   label: string | null;
   confidence: number | null;
   evidence_msg_ids: string[] | null;
+  severity: string | null;
+  reasoning: string | null;
   created_at: string;
 }

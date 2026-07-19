@@ -14,8 +14,9 @@ function percent(confidence: number | null): string | null {
 }
 
 // Alert detail for the open conversation — desktop right column and phone
-// pull-up sheet render this same component. Shows contract fields only
-// (label, confidence, evidence_msg_ids); the real model returns nothing else.
+// pull-up sheet render this same component. Shows contract fields
+// (label, confidence, evidence_msg_ids) plus the real model's severity +
+// reasoning (see supabase/migrations/007_add_llm_reasoning_fields.sql).
 export default function AlertPanel({
   conversationScores,
   messageScores,
@@ -58,7 +59,13 @@ export default function AlertPanel({
               <p className="text-sm text-red-800">
                 <span className="font-medium capitalize">{s.label}</span>
                 {s.confidence != null && <> — {percent(s.confidence)}</>}
+                {s.severity && (
+                  <span className="ml-2 rounded bg-red-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-900">
+                    {s.severity}
+                  </span>
+                )}
               </p>
+              {s.reasoning && <p className="mt-1 text-xs text-red-800">{s.reasoning}</p>}
               <p className="mt-1 text-xs text-red-700">
                 {s.evidence_msg_ids?.length ?? 0} evidence message(s)
               </p>

@@ -7,11 +7,18 @@ code-mixed Singlish/Manglish/Mandarin chat. Judges access it via a
 shared link. The ML model is built/hosted by a teammate — this repo
 only CALLS it.
 
-## CURRENT STAGE: app prototype
+## CURRENT STAGE: real model integrated
 
-Right now we are building the chat app itself. Harm scoring runs on a
-SIMPLE MOCK. Do NOT implement window-building, token budgets, or any
-real model integration unless I explicitly ask — those come later.
+This file originally documented the standalone prototype stage of
+`tech4city_app`, when it was a separate repo and scoring was a keyword
+mock. It has since been merged (via `git subtree`, history preserved)
+into this monorepo as `frontend/`, alongside `backend/` (FastAPI) and
+`pipeline/` (the actual GNN + LLM recognition engine) — see the root
+`README.md` and `docs/` for the current architecture. The sections
+below are kept for frontend-specific conventions (schema, UI rules,
+responsive layout) but treat "Model contract" and "Mock scoring
+behaviour" as historical — `docs/backend.md` and `docs/pipeline.md` are
+the current source of truth for how scoring actually works now.
 
 ## Features (in build order)
 
@@ -27,8 +34,9 @@ real model integration unless I explicitly ask — those come later.
 
 - React + Vite + TypeScript + Tailwind CSS
 - @supabase/supabase-js for ALL data, auth, and realtime
-- NO custom backend server in this repo. Scoring is a Supabase Edge
-  Function (`score-message`), mock logic for now.
+- No backend logic lives in `frontend/` itself. Scoring is triggered
+  via the Supabase Edge Function (`score-message`), which is now a thin
+  proxy forwarding to the real `backend/` service — see docs/backend.md.
 
 ## Database (Supabase / Postgres) — contract-aligned, do not simplify
 
@@ -52,57 +60,49 @@ real model integration unless I explicitly ask — those come later.
 - conversation_scores(id uuid PK,
   conversation_id uuid references conversations(id),
   label text, confidence float, evidence_msg_ids uuid[],
+  severity text, reasoning text,
   created_at timestamptz default now())
   -- absence of rows = safe; scoring only writes problems found
+  -- severity/reasoning added in migration 007 once the real model (see
+  -- ../pipeline/, ../backend/) replaced the mock -- the LLM reasoning stage
+  -- returns both and the old "no extra fields" assumption below no longer
+  -- holds for these two.
 - RLS on everything: users only see conversations they're members of,
   only their own profile is editable, scores visible only to members
   of the relevant conversation.
 - Realtime enabled on: messages, message_scores, conversation_scores.
 
-## Model contract (REFERENCE ONLY for now — matches team agreement)
+## Model contract (HISTORICAL — describes the original prototype agreement)
 
-The real model will receive a conversation window and return:
-{
-"message_scores": [ // empty if none
-{ "msg_id": str, "label": str, "confidence": float } ],
-"conversation_scores": [ // empty if none
-{ "conversation_id": str, "label": str, "confidence": float,
-"evidence_msg_ids": [str] } ]
-}
-Labels are open-ended harm types (scam, cyberbullying, grooming, ...).
-Anything not flagged is safe. The two score tables above mirror this
-shape exactly. Window building (token budgets, reply chains) is a
-LATER task — not now.
+The original agreement, from when scoring was a mock: the model
+receives a conversation window and returns
+{ "message_scores": [{ msg_id, label, confidence }],
+  "conversation_scores": [{ conversation_id, label, confidence, evidence_msg_ids }] }.
+This still holds as the base shape (labels are open-ended harm types;
+absence of rows = safe), but the real model additionally writes
+`severity` and `reasoning` onto `conversation_scores` (migration 007) —
+see `docs/backend.md` for the current, authoritative contract and
+`docs/pipeline.md` for how the pipeline actually produces these fields.
 
-## Mock scoring behaviour (prototype stage)
+## Scoring behaviour (HISTORICAL — this described the old keyword mock)
 
-Edge Function `score-message`, called after each message send with the
-last 10 messages of the conversation (simple count — no token logic):
-
-- Any single message containing scam-ish keywords ("transfer first",
-  "OTP", "click link", "bayar sekarang") -> insert a message_scores
-  row { msg_id, label: "scam", confidence: 0.8 }
-- If >= 2 grooming signals fire across the 10 messages -> insert ONE
-  conversation_scores row { conversation_id, label: "grooming",
-  confidence, evidence_msg_ids: messages containing signals }.
-  Grooming signal keyword lists (multilingual):
-  - recruitment_lure: "overseas job","kerja luar negara","high pay","高薪"
-  - upfront_fee: "agent fee","deposit","pay first","bayar dulu"
-  - passport_retention: "passport","hold documents","pegang passport"
-  - secrecy_isolation: "don't tell","jangan bagitau","secret","别告诉"
-  - debt_bondage: "salary deduction","owe","hutang"
-  - urgency_pressure: "decide today","cepat","limited"
-- Nothing fired -> write nothing (absence = safe)
+The mock's keyword-matching logic (scam/grooming keyword lists, last-10
+window) has been replaced by the real `pipeline/` (preprocess -> embed
+-> graph -> GNN -> LLM reasoning), fetched and written by `backend/`.
+The Edge Function no longer scores anything itself — it only forwards
+`{ conversation_id }` to the backend after an auth + membership check.
+See `docs/backend.md` for what actually runs now.
 
 ## Harm alert UI (driven ONLY by contract fields)
 
 - Message with a message_scores row -> highlight + small label badge
 - Any conversation_scores row for the open conversation -> warning
-  banner (label + confidence); its evidence_msg_ids messages get
-  highlighted
+  banner (label + confidence + severity badge + reasoning text);
+  its evidence_msg_ids messages get highlighted
 - Conversation list: badge on any conversation that has score rows
-- Do not invent extra fields (no rationale/signals in the UI — the
-  real model won't return them)
+- Do not invent UI fields beyond what the DB schema actually has --
+  severity/reasoning are legitimate now (the real model returns them),
+  but nothing beyond those plus label/confidence/evidence_msg_ids
 
 ## Responsive layout (important — judges use phones)
 
@@ -114,6 +114,6 @@ last 10 messages of the conversation (simple count — no token logic):
 
 - Build ONLY the feature I ask for in each conversation. Nothing extra.
 - Show a plan and wait for approval before writing files.
-- Never commit .env files. Use .env.example with placeholder keys.
+- Never commit .env files. Use the repo root's .env.example with placeholder keys.
 - Write SQL as migration files in supabase/migrations/ so schema is
   in git.
